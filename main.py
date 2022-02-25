@@ -29,7 +29,6 @@ def run_query(conn, query):
 
 def bt_aceitar_callback(conn, id) -> None:
   st.write(f"TESTANDO: ID {id}")
-  # Exemplo: UPDATE `papude`.`alarmes_externas` SET `vref_min` = NULL WHERE (`idalarmes` = '7');
   query = f"UPDATE alarmes_externas SET status = 'Aceito' WHERE idalarmes = {id};"
 
   _ = run_query(conn, query)
@@ -39,7 +38,6 @@ def bt_aceitar_callback(conn, id) -> None:
 
 def bt_ignorar_callback(conn, id) -> None:
   st.write(f"TESTANDO: ID {id}")
-  # Exemplo: UPDATE `papude`.`alarmes_externas` SET `vref_min` = NULL WHERE (`idalarmes` = '7');
   query = f"UPDATE alarmes_externas SET status = 'Ignorado' WHERE idalarmes = {id};"
 
   _ = run_query(conn, query)
@@ -55,35 +53,14 @@ def apresenta_alarmes(conn, rows) -> None:
   with col_vazia1:
     st.empty()
 
-  # with col_alarmes:
-  #   st.header("\t\t\tAlarmes")
-  #   container = st.container()
-
-  #   for (id, hora, _, medida, tipo, valor, vref_min, vref_max,
-  #       unidade, tempo, prioridade, _) in rows:
-
-  #       msg = f"{hora}: {medida} -> Tipo {tipo}\n" + \
-  #         f"Prioridade: {prioridade}\n\n" + \
-  #         f"Referência: [{vref_min} - {vref_max}] {unidade}\n" + \
-  #         f"Valor: {valor} {unidade}\tTempo: {tempo} min"
-
-  #       container.error(msg)
-
-  #       if container.button("Aceitar", key=f"{id}"):
-  #         bt_aceitar_callback(conn, id)
-  #       if container.button("Ignorar", key=f"{id}"):
-  #         bt_ignorar_callback(conn, id)
-
-  #       container.write("\n\n")
-
   with col_alarmes:
-    st.write("<h2>Alarmes</h2>", unsafe_allow_html=True)
+    st.write("<h2>Alarmes</h2>", unsafe_allow_html=True)    # Ajustar CSS
     
 
     for (id, hora, _, medida, tipo, valor, vref_min, vref_max,
         unidade, tempo, prioridade, _) in rows:
 
-        msg = f"{hora.time()}: {medida} - {tipo}"
+        msg = f"{hora.date().strftime('%d/%m/%Y')} {hora.time()}: {medida} - {tipo}"
 
         # explainer = f"<h3>Tipo: {tipo}</h3><p>Ref. mín.: {vref_min} {unidade} &ensp;&ensp;&ensp; Ref. máx.: {vref_max} {unidade}</p>"
         # explainer += f"<p>Valor Alarmado: {valor} {unidade}</p>"
@@ -92,19 +69,19 @@ def apresenta_alarmes(conn, rows) -> None:
         msg_max = f"Valor máximo: {vref_max} {unidade}" if vref_max else ""
 
         explainer = f"<h4>{hora.date().strftime('%d/%m/%Y')}&ensp;&ensp;{hora.time()} </br> {medida}&ensp;&ensp;&ensp; ({tipo})</h4>" + \
-          f"<p>Referência: "
-          # f"<p>Prioridade: {prioridade}</p><p>Referência: "
+          f"<p>Valor Observado de {valor} {unidade} por mais de {tempo} min</p>" + \
+            f"</br><p>Referência: </p>"
 
         if vref_min: 
-          explainer += f"</br>&ensp;&ensp;{msg_min}</p>"
+          explainer += f"&ensp;&ensp;{msg_min}</p>"
         if vref_max:
-          explainer += f"</br>&ensp;&ensp;{msg_max}</p>"
-
+          explainer += f"&ensp;&ensp;{msg_max}</p>"
           
-        explainer += f"<p>Valor Observado: {valor} {unidade} por {tempo} min</p>"
+        #explainer += f"<p>Valor Observado: {valor} {unidade} por mais de {tempo} min</p>"
 
-        with st.expander(msg):
+        with st.expander(msg): # issue: Intertravamento com ID 
           st.write(explainer, unsafe_allow_html=True)
+          
           if st.button("Aceitar", key=f"{id}"):
             bt_aceitar_callback(conn, id)
           if st.button("Ignorar", key=f"{id}"):

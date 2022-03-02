@@ -9,88 +9,99 @@ st.set_page_config(layout="wide")
 
 
 # CONNECTION
-#@st.cache(allow_output_mutation=True)
 def init_connection():
   try:
     conn = mysql.connector.connect(**st.secrets["mysql"])
   except Exception as e:
-    st.write("Erro na conexão do Banco de Dados")
+    st.write(f"Erro na conexão do Banco de Dados: {e}")
 
   return conn
 
 # QUERY MANAGE
-#@st.cache(ttl=60)
-def run_query(conn, query):
+def __run_query(conn, query):
   cursor = conn.cursor(buffered=True)
   cursor.execute(query)    
 
   return cursor
 
 
-def bt_aceitar_callback(conn, id) -> None:
-  st.write(f"TESTANDO: ID {id}")
-  query = f"UPDATE alarmes_externas SET status = 'Aceito' WHERE idalarmes = {id};"
+def bt_callback(conn, id, mode="Aceito") -> None:
+  if mode in ["Aceito", "Ignorado"]:  # Modos aceitos atualmente
+    query = f"UPDATE alarmes_externas SET status = '{mode}' WHERE idalarmes = {id};"
 
-  _ = run_query(conn, query)
-  conn.commit()
+    _ = __run_query(conn, query)
+    conn.commit()
 
-  st.experimental_rerun()   # Força rodar o script novamente
+    st.experimental_rerun()   # Força rodar o script novamente
 
-def bt_ignorar_callback(conn, id) -> None:
-  st.write(f"TESTANDO: ID {id}")
-  query = f"UPDATE alarmes_externas SET status = 'Ignorado' WHERE idalarmes = {id};"
-
-  _ = run_query(conn, query)
-  conn.commit()
-
-  st.experimental_rerun()   # Força rodar o script novamente
+  else:
+    st.error("Erro no callback")
 
 
-def apresenta_alarmes(conn, rows) -> None:
-  # Layout básico da lista de alarmes
-  col_vazia1, col_alarmes, col_vazia2 = st.columns([2,1,2])
+def imprime_alarmes(conn, rows, title) -> None:
+  st.write(f"<h2>{title}</h2>", unsafe_allow_html=True)    
 
-  with col_vazia1:
+  for (id, hora, _, medida, tipo, valor, vref_min, vref_max,
+      unidade, tempo, prioridade, _) in rows:
+
+      msg = f"{hora.date().strftime('%d/%m/%Y')} - {hora.time()}: {medida} - {tipo}"
+      msg_min = f"Valor mínimo: {vref_min} {unidade}" if vref_min else ""
+      msg_max = f"Valor máximo: {vref_max} {unidade}" if vref_max else ""
+
+      explainer = f"<h4>{hora.date().strftime('%d/%m/%Y')}&ensp;&ensp;{hora.time()} </br> {medida}&ensp;&ensp;&ensp; ({tipo})</h4>" + \
+        f"<p>Prioridade: {prioridade}</p></br><p>Referência: "          
+
+      if vref_min: 
+        explainer += f"</br>&ensp;&ensp;{msg_min}</p>"
+      if vref_max:
+        explainer += f"</br>&ensp;&ensp;{msg_max}</p>"
+
+      explainer += f"<p>Valor Observado: {valor} {unidade} por {tempo} min</p>"
+
+
+      with st.expander(msg):    # ISSUE: Intertravamento com User ID
+        st.write(explainer, unsafe_allow_html=True)
+        if st.button("Aceitar", key=f"{id}"):
+          bt_callback(conn, id, mode="Aceito")
+        if st.button("Ignorar", key=f"{id}"):
+          bt_callback(conn, id, mode="Ignorado")
+
+        st.write("\n\n")
+
+
+
+
+def tela_home (conn) -> None:
+  st.write('<h1 style="text-align:center">Alarmes Áreas Externas</h1>', unsafe_allow_html=True)
+
+  # Apresentação Alarmes (Tela principal)
+  col_1, col_vazia, col_2 = st.columns([4,1,4])
+
+  with col_1:
+    # Executa a query
+    rows_24h = __run_query(conn, "SELECT * FROM alarmes_externas WHERE status = 'Aberta' AND TIMESTAMP >= now() - INTERVAL 1 day ORDER BY prioridade DESC, TIMESTAMP DESC;")
+
+    # Apresenta os alarmes em aberto em menos de 24h
+    imprime_alarmes(conn, rows_24h, title="Alarmes nas últimas 24h")
+
+
+  with col_vazia:
     st.empty()
 
-  with col_alarmes:
-    st.write("<h2>Alarmes</h2>", unsafe_allow_html=True)    # Ajustar CSS
-    
 
-    for (id, hora, _, medida, tipo, valor, vref_min, vref_max,
-        unidade, tempo, prioridade, _) in rows:
+  with col_2:
+    # Executa a query
+    rows_old = __run_query(conn, "SELECT * FROM alarmes_externas WHERE status = 'Aberta' AND TIMESTAMP < now() - INTERVAL 1 day ORDER BY prioridade DESC, TIMESTAMP DESC;")
 
-        msg = f"{hora.date().strftime('%d/%m/%Y')} {hora.time()}: {medida} - {tipo}"
+    # Apresenta os alarmes em aberto em menos de 24h
+    imprime_alarmes(conn, rows_old, title="Alarmes Anteriores")
 
-        # explainer = f"<h3>Tipo: {tipo}</h3><p>Ref. mín.: {vref_min} {unidade} &ensp;&ensp;&ensp; Ref. máx.: {vref_max} {unidade}</p>"
-        # explainer += f"<p>Valor Alarmado: {valor} {unidade}</p>"
 
-        msg_min = f"Valor mínimo: {vref_min} {unidade}" if vref_min else ""
-        msg_max = f"Valor máximo: {vref_max} {unidade}" if vref_max else ""
 
-        explainer = f"<h4>{hora.date().strftime('%d/%m/%Y')}&ensp;&ensp;{hora.time()} </br> {medida}&ensp;&ensp;&ensp; ({tipo})</h4>" + \
-          f"<p>Valor Observado de {valor} {unidade} por mais de {tempo} min</p>" + \
-            f"</br><p>Referência: </p>"
+# ISSUE: Tela de Análises
+def tela_analises (conn):
+  st.header(":hammer: Tela em fila de Construção")
 
-        if vref_min: 
-          explainer += f"&ensp;&ensp;{msg_min}</p>"
-        if vref_max:
-          explainer += f"&ensp;&ensp;{msg_max}</p>"
-          
-        #explainer += f"<p>Valor Observado: {valor} {unidade} por mais de {tempo} min</p>"
-
-        with st.expander(msg): # issue: Intertravamento com ID 
-          st.write(explainer, unsafe_allow_html=True)
-          
-          if st.button("Aceitar", key=f"{id}"):
-            bt_aceitar_callback(conn, id)
-          if st.button("Ignorar", key=f"{id}"):
-            bt_ignorar_callback(conn, id)
-
-          st.write("\n\n")
-
-  with col_vazia2:
-    st.empty()
 
 
 
@@ -99,17 +110,20 @@ def main() -> None:
   # Inicia conexão e query
   conn = init_connection()
 
-  # Executa a query
-  rows = run_query(conn, "SELECT * FROM alarmes_externas WHERE status = 'Aberta';")
+  # Menu lateral com escolha para página a ser apresentada
+  choice = st.sidebar.radio(label="Menu", options=["Home", "Análise"])
 
-  # Apresenta os alarmes em aberto
-  apresenta_alarmes(conn, rows)
+  # Apresenta os alarmes na tela principal
+  if choice == "Home":  
+    tela_home(conn)
+  elif choice == "Análise":
+    tela_analises(conn)
 
   # Fecha a conexão com o DB
   conn.close()
 
   
-
+  
 
 if __name__ == "__main__":
   # update every 2 mins
@@ -117,5 +131,6 @@ if __name__ == "__main__":
   st_autorefresh(interval=interval*60000, key="dataframerefresh")
 
   main()
+
 
 
